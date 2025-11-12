@@ -57,8 +57,9 @@ docker compose build
 **Start all services**
 
 ```Terminal
-docker compose up -d
+docker compose up -d auth-service user-service post-service comment-service
 ```
+Normally, we can use `docker compose up -d` to start all the service, but since the gateway is unused right now, we will temporarily disable nginx.
 
 **Verify containers are running**
 
@@ -72,12 +73,6 @@ Check for contains:
 - `post-service`
 - `comment-service`
 
-**To View logs**
-
-```Terminal
-docker compose logs -f
-```
-
 ## Usage Instructions
 
 ### Starting the System
@@ -85,7 +80,9 @@ docker compose logs -f
 From the project root:
 
 ```Terminal
-docker compose up -d --build
+docker compose build
+
+docker compose up -d auth-service user-service post-service comment-service
 ```
 
 Check that the containers are healthy
@@ -264,10 +261,13 @@ The system can be tested manually through `curl` or any HTTP client (example: br
 Confirm that each service responds to `/health` by including in the terminal:
 
 ```Terminal
-curl http://localhost:8001/health
-curl http://localhost:8002/health
-curl http://localhost:8003/health
-curl http://localhost:8004/health
+docker compose exec auth-service     curl -sS http://localhost:8000/health
+
+docker compose exec user-service     curl -sS http://localhost:8000/health
+
+docker compose exec post-service     curl -sS http://localhost:8000/health
+
+docker compose exec comment-service  curl -sS http://localhost:8000/health
 ```
 
 Simulate failures by stopping one service and check how its dependents respond:
@@ -278,12 +278,12 @@ docker compose stop auth-service
 
 user-service should now report auth-service as unhealthy
 ```Terminal
-curl http://localhost:8002/health
+docker compose exec user-service     curl -sS http://localhost:8000/health
 ```
 
 user-service should now also be unhealthy
 ```Terminal
-curl http://localhost:8003/health
+docker compose exec user-service     curl -sS http://localhost:8000/health
 ```
 
 Restart the service:
