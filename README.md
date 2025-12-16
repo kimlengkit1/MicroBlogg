@@ -232,44 +232,131 @@ Return `HTTP/1.1 201 OK` if successful:
 }
 ```
 
-```
-### user-service health
+
+### User-service health
+
 ```Terminal
-docker compose exec user-service curl http://localhost:8000/health
+docker compose exec user-service curl -sS -i http://localhost:8000/health
+```
+or
+```Terminal
+docker compose exec user-service curl -sS -i http://localhost:8000/users/health
 ```
 
 status `"healthy"` with HTTP code `200`:
 
 ```JSON
 {
-  "service": "user-service",
-  "status": "healthy",
-  "dependencies": {
-    "auth-service": {
-      "status": "healthy",
-      "response_time_ms": 12.5,
-      "error": null
-    }
-  }
+  HTTP/1.1 200 OK
+  date: Tue, 16 Dec 2025 19:02:37 GMT
+  server: uvicorn
+  content-length: 148
+  content-type: application/json
+
+  {"service":"user-service","status":"healthy","dependencies":{"auth-service":{"status":"healthy","response_time_ms":11.68166595743969,"error":null}}}
 }
 ```
+status `"unhealthy"` with HTTP code `503`.
 
-status `"unhealthy"` with HTTP code `503`:
+### Via Nginx:
+
+```Terminal
+curl -sS -i http://localhost:8080/users/health
+```
+
+If successful:
 
 ```JSON
 {
-  "service": "user-service",
-  "status": "unhealthy",
-  "dependencies": {
-    "auth-service": {
-      "status": "unhealthy",
-      "response_time_ms": 50.3,
-      "error": "HTTPError or connection error details..."
-    }
-  }
+  HTTP/1.1 200 OK
+  Server: nginx/1.29.3
+  Date: Tue, 16 Dec 2025 19:02:51 GMT
+  Content-Type: application/json
+  Content-Length: 149
+  Connection: keep-alive
+
+  {"service":"user-service","status":"healthy","dependencies":{"auth-service":{"status":"healthy","response_time_ms":18.958040978759527,"error":null}}}
 }
 ```
 
+## User-service Profile
+
+Create an account if an account doesn't exist:
+
+```Terminal
+curl -sS -X POST http://localhost:8080/auth/signup -H "Content-Type: application/json" -d '{"email":"bob@example.com","password":"CorrectHorseBatteryStaple"}'
+{"id":3,"email":"bob@example.com"}
+```
+Login and get the TOKEN access key:
+
+```Terminal
+TOKEN=$(curl -sS -X POST http://localhost:8080/auth/login -H "Content-Type: application/json" -d '{"email":"bob@example.com","password":"CorrectHorseBatteryStaple"}' | python3 -c 'import sys, json; print(json.load(sys.stdin)["access_token"])')
+echo "$TOKEN"
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwiaWF0IjoxNzY1OTExODk4LCJleHAiOjE3NjU5MTU0OTh9.5CRqRBPPVBTXRpuhhJ7fyKmst-iNrdjDaRrpBRwD1gU
+```
+
+Check account:
+
+```Terminal
+curl -sS -i http://localhost:8080/users/me
+```
+
+If successful:
+
+```JSON
+{
+  HTTP/1.1 200 OK
+  Server: nginx/1.29.3
+  Date: Tue, 16 Dec 2025 19:07:09 GMT
+  Content-Type: application/json
+  Content-Length: 56
+  Connection: keep-alive
+
+  {"id":1,"auth_user_id":3,"display_name":null,"bio":null}
+}
+```
+
+Edit Profile:
+
+```Terminal
+curl -sS -i -X PUT http://localhost:8080/users/me -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"display_name":"Bob B.","bio":"I like distributed systems."}'
+```
+
+If successful:
+
+```JSON
+{
+  HTTP/1.1 200 OK
+  Server: nginx/1.29.3
+  Date: Tue, 16 Dec 2025 19:08:00 GMT
+  Content-Type: application/json
+  Content-Length: 85
+  Connection: keep-alive
+
+  {"id":1,"auth_user_id":3,"display_name":"Bob B.","bio":"I like distributed systems."}
+}
+```
+
+Profile Lookup by id:
+
+```Terminal
+curl -sS -i http://localhost:8080/users/1
+```
+
+If successful:
+
+```JSON
+{
+  HTTP/1.1 200 OK
+  Server: nginx/1.29.3
+  Date: Tue, 16 Dec 2025 19:08:18 GMT
+  Content-Type: application/json
+  Content-Length: 85
+  Connection: keep-alive
+  
+  {"id":1,"auth_user_id":3,"display_name":"Bob B.","bio":"I like distributed systems."}
+}
+```
 ### post-service health
 ```Terminal
 docker compose exec post-service curl http://localhost:8000/health
