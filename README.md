@@ -105,18 +105,130 @@ Each service exposes a health endpoint:
 
 Call them directly using `docker compose exec`:
 
-### auth-service health
+## Auth-service health
 ```Terminal
 docker compose exec auth-service curl http://localhost:8000/health
 ```
+or
+
+```Terminal
+docker compose exec auth-service curl http://localhost:8000/auth/health
+```
+
+### Nginx
+
+```Terminal
+  curl -sS -i http://localhost:8080/auth/health
+```
+
 
 status `"healthy"` with HTTP code `200`:
 
 ```JSON
 {
-  "service": "post-service",
-  "status": "healthy",
-  "dependencies": {}
+  HTTP/1.1 200 OK
+  date: Tue, 16 Dec 2025 18:26:53 GMT
+  server: uvicorn
+  content-length: 145
+  content-type: application/json
+
+  {"service":"auth-service","status":"healthy","dependencies": {"database":     {"status":"healthy","response_time_ms":1.7119169933721423,"error":null}}}
+  }
+```
+
+or 
+
+```JSON
+{
+  HTTP/1.1 200 OK
+  Server: nginx/1.29.3
+  Date: Tue, 16 Dec 2025 18:27:41 GMT
+  Content-Type: application/json
+  Content-Length: 144
+  Connection: keep-alive
+}
+```
+
+## Auth-service Sign up/Login
+
+Sign up:
+```Terminal
+  docker compose exec auth-service sh -lc 'curl -sS -i -X POST http://localhost:8000/auth/signup -H "Content-Type: application/json" -d "{\"email\":\"alice2@example.com\",\"password\":\"CorrectHorseBatteryStaple\"}"'
+```
+
+Replace the email field or password file with the email and password you want to sign up with. It should return `HTTP/1.1 201 Created` if successful:
+
+```JSON
+{
+  HTTP/1.1 201 Created
+  date: Tue, 16 Dec 2025 18:27:06 GMT
+  server: uvicorn
+  content-length: 37
+  content-type: application/json
+
+  {"id":1,"email":"alice2@example.com"}
+}
+```
+
+Login:
+
+```Terminal
+docker compose exec auth-service sh -lc \
+'curl -sS -i -X POST http://localhost:8000/auth/login -H "Content-Type: application/json" -d "{\"email\":\"alice2@example.com\",\"password\":\"CorrectHorseBatteryStaple\"}"'
+```
+Return `HTTP/1.1 201 OK` if successful:
+
+```JSON
+{
+  HTTP/1.1 200 OK
+  date: Tue, 16 Dec 2025 18:27:13 GMT
+  server: uvicorn
+  content-length: 182
+  content-type: application/json
+
+  {"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiaWF0IjoxNzY1OTA5NjM0LCJleHAiOjE3NjU5MTMyMzR9.pbKpLa5P5pmDheFufq7dMGnBKhCwaoy7W3yScdIeiLw","token_type":"bearer"}
+}
+```
+
+### Nginx:
+
+Sign Up:
+
+```Terminal
+curl -sS -i -X POST http://localhost:8080/auth/signup -H "Content-Type: application/json" -d '{"email":"alice3@example.com","password":"CorrectHorseBatteryStaple"}'
+```
+
+Return `HTTP/1.1 201 Created` if successful:
+
+```JSON
+{
+  HTTP/1.1 201 Created
+  Server: nginx/1.29.3
+  Date: Tue, 16 Dec 2025 18:27:49 GMT
+  Content-Type: application/json
+  Content-Length: 37
+  Connection: keep-alive
+
+  {"id":2,"email":"alice3@example.com"}
+}
+```
+Login:
+
+```Terminal
+curl -sS -i -X POST http://localhost:8080/auth/login -H "Content-Type: application/json" -d '{"email":"alice3@example.com","password":"CorrectHorseBatteryStaple"}'
+```
+Return `HTTP/1.1 201 OK` if successful:
+
+```JSON
+{
+  HTTP/1.1 200 OK
+  Server: nginx/1.29.3
+  Date: Tue, 16 Dec 2025 18:27:55 GMT
+  Content-Type: application/json
+  Content-Length: 182
+  Connection: keep-alive
+
+{"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwiaWF0IjoxNzY1OTA5Njc1LCJleHAiOjE3NjU5MTMyNzV9.TXEZYOS7DGgPQY2o9lZK5oWxRHqFKsWJBq3UalskdYI","token_type":"bearer"}
 }
 ```
 
