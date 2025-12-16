@@ -17,6 +17,8 @@ services:
     build:
       context: ./auth-service
       dockerfile: Dockerfile
+    volumes:
+      - auth-data:/app/data
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -119,3 +121,4 @@ services:
 
 volumes:
   redis-data:
+  auth-data:
