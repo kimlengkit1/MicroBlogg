@@ -93,7 +93,7 @@ Check that the containers are healthy
 ```Terminal
 docker compose ps
 ```
-You should see `auth-service`, `user-service`, `post-service`, `comment-service`, `redis`, and `api-gateway` (nginx) up and running. We won't be needing the `redis` and `api-gateway` for the `/health` endpoints currently. It is for later implementation of the project.
+You should see `auth-service`, `user-service`, `post-service`, `comment-service`, and `api-gateway` (nginx) up and running. We won't be needing the `redis` and `api-gateway` for the `/health` endpoints currently. It is for later implementation of the project.
 
 ### Health Check Endpoints
 
@@ -338,3 +338,10 @@ MICROBLOGG (milestone1_kimlengkit)/
 - `architecture-diagram.md/.png` is a visual of health-check interactions
 - `architecture-document.md` is the system architecture document 
 - `CODE_PROVENANCE.md` is the prompts/tools where AI outputs were used and non-AI sources
+
+## Troubleshooting
+
+- If port 8080 is already in use, use 8088:80 in docker-compose.yml or any free port
+- If service(s) is/are unhealthy: run ```Terminal
+docker compose logs --tail=200 <service>``` to see the startup errors
+  - Verify `uvicorn app.main:app`, `/health` route, and `curl` are available for the healthcheck
