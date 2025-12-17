@@ -1,13 +1,11 @@
-from datetime import datetime
+from sqlmodel import SQLModel, Field
 from typing import Optional
-from sqlmodel import SQLModel, Field, UniqueConstraint
+from datetime import datetime, timezone
 
-class UserProfile(SQLModel, table=True):
-    __tablename__ = "user_profiles"
-    __table_args__ = (UniqueConstraint("auth_user_id", name="uq_profiles_auth_user_id"),)
-    id: Optional[int] = Field(default=None, primary_key=True)
-    auth_user_id: int = Field(index=True)  # id from auth-service
-    display_name: Optional[str] = None
+class Profile(SQLModel, table=True):
+    id: str = Field(primary_key=True, index=True)   # profile id
+    userId: str = Field(unique=True, index=True)    # auth-service user id (1-1)
+    display_name: str
     bio: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: Optional[str] = None

@@ -1,12 +1,11 @@
-from datetime import datetime
-from typing import Optional
 from sqlmodel import SQLModel, Field
+from typing import Optional
+from datetime import datetime, timezone
 
 class Post(SQLModel, table=True):
-    __tablename__ = "posts"
-    id: Optional[int] = Field(default=None, primary_key=True)
-    author_auth_user_id: int = Field(index=True)
+    id: str = Field(primary_key=True, index=True)
+    authorId: str = Field(index=True)
     title: str
     body: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: Optional[str] = None

@@ -1,72 +1,58 @@
-import os, time
-from contextlib import asynccontextmanager
-from typing import Annotated
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
-from sqlmodel import SQLModel, create_engine, Session, select
-from pydantic import BaseModel
+import os, uuid, httpx
+from fastapi import FastAPI, HTTPException, Depends, Header
+from sqlmodel import select, Session
+from datetime import datetime, timezone
+from typing import Dict, Optional
+
+from .db import init_db, get_session
 from .models import User
-from .schemas import SignupIn, LoginIn, TokenOut, UserOut
-from .security import hash_password, verify_password, make_access_token
-from .health_models import HealthResponse, DependencyHealth
+from .schemas import SignupIn, LoginIn, TokenOut, UserOut, HealthResponse, DependencyHealth, Status
+from .security import hash_password, verify_password, mint_token, verify_token
 
-# DB setup (database-per-service)
-DB_URL = os.getenv("DATABASE_URL", "sqlite:///data/auth.db")
-engine = create_engine(DB_URL, connect_args={"check_same_thread": False} if DB_URL.startswith("sqlite") else {})
+APP_NAME = "auth-service"
+app = FastAPI(title=APP_NAME)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    SQLModel.metadata.create_all(engine)
-    yield
+@app.on_event("startup")
+def startup():
+    init_db()
 
-app = FastAPI(title="auth-service", lifespan=lifespan)
-
-# dependency
-def get_session():
-    with Session(engine) as session:
-        yield session
-
-SessionDep = Annotated[Session, Depends(get_session)]
-
-# health
 @app.get("/health", response_model=HealthResponse)
-async def health():
-    t0 = time.perf_counter()
+def health():
+    deps: Dict[str, DependencyHealth] = {}
+    # DB touch
     try:
-        # simple DB probe
-        with Session(engine) as s:
-            s.exec(select(User).limit(1)).all()
-        overall = "healthy"
-        db_health = DependencyHealth(status="healthy", response_time_ms=(time.perf_counter()-t0)*1000)
-    except Exception as exc:
-        overall = "unhealthy"
-        db_health = DependencyHealth(status="unhealthy", error=str(exc), response_time_ms=(time.perf_counter()-t0)*1000)
+        for _ in get_session():
+            pass
+        db_status: Status = "healthy"
+    except Exception as e:
+        db_status = "unhealthy"
+        deps["database"] = DependencyHealth(status="unhealthy", error=str(e))
+    overall: Status = "healthy" if db_status == "healthy" else "unhealthy"
+    return HealthResponse(service=APP_NAME, status=overall, dependencies=deps)
 
-    payload = HealthResponse(service="auth-service", status=overall, dependencies={"database": db_health})
-    code = 200 if overall == "healthy" else 503
-    return JSONResponse(status_code=code, content=payload.model_dump())
-
-# alias for /health
-@app.get("/auth/health", response_model=HealthResponse)
-async def health_alias():
-    return await health()
-
-# auth endpoints
 @app.post("/auth/signup", response_model=UserOut, status_code=201)
-def signup(body: SignupIn, session: SessionDep):
-    exists = session.exec(select(User).where(User.email == body.email)).first()
-    if exists:
+def signup(body: SignupIn, session: Session = Depends(get_session)):
+    existing = session.exec(select(User).where(User.email == body.email)).first()
+    if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
-    user = User(email=body.email, password_hash=hash_password(body.password))
-    session.add(user)
-    session.commit()
-    session.refresh(user)
-    return UserOut(id=user.id, email=user.email)
+    u = User(id=str(uuid.uuid4()), email=body.email, password_hash=hash_password(body.password))
+    session.add(u); session.commit(); session.refresh(u)
+    return UserOut(id=u.id, email=u.email)
 
 @app.post("/auth/login", response_model=TokenOut)
-def login(body: LoginIn, session: SessionDep):
-    user = session.exec(select(User).where(User.email == body.email)).first()
-    if not user or not verify_password(body.password, user.password_hash):
+def login(body: LoginIn, session: Session = Depends(get_session)):
+    u = session.exec(select(User).where(User.email == body.email)).first()
+    if not u or not verify_password(body.password, u.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    token = make_access_token(sub=str(user.id))
-    return TokenOut(access_token=token)
+    return TokenOut(access_token=mint_token(u.id, u.email))
+
+@app.post("/auth/verify")
+def verify(payload: Dict):
+    token = payload.get("token")
+    if not token:
+        raise HTTPException(status_code=400, detail="token required")
+    try:
+        claims = verify_token(token)
+        return {"user_id": claims["sub"], "email": claims["email"]}
+    except Exception:
+        raise HTTPException(status_code=401, detail="invalid token")

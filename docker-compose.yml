@@ -1,47 +1,49 @@
+version: "3.8"
+
 services:
   redis:
     image: redis:7-alpine
-    # container_name: redis
-    # ports:
-    #   - "6379:6379"
     restart: unless-stopped
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # 'redis-cli ping' returns PONG when healthy
+      test: ["CMD-SHELL", "redis-cli ping || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+
   auth-service:
     build:
       context: ./auth-service
       dockerfile: Dockerfile
-    volumes:
-      - auth-data:/app/data
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+    volumes:
+      - auth-data:/app/data
     depends_on:
       redis:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+
   user-service:
     build:
       context: ./user-service
       dockerfile: Dockerfile
-    volumes:
-      - user-data:/app/data
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - AUTH_SERVICE_BASE=http://auth-service:8000
+    volumes:
+      - user-data:/app/data
     depends_on:
       redis:
         condition: service_healthy
@@ -49,11 +51,12 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+
   post-service:
     build:
       context: ./post-service
@@ -63,6 +66,8 @@ services:
       - REDIS_PORT=6379
       - AUTH_SERVICE_BASE=http://auth-service:8000
       - USER_SERVICE_BASE=http://user-service:8000
+    volumes:
+      - post-data:/app/data
     depends_on:
       redis:
         condition: service_healthy
@@ -72,11 +77,12 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+
   comment-service:
     build:
       context: ./comment-service
@@ -84,9 +90,9 @@ services:
     environment:
       - AUTH_SERVICE_BASE=http://auth-service:8000
       - POST_SERVICE_BASE=http://post-service:8000
+    volumes:
+      - comment-data:/app/data
     depends_on:
-      redis:
-        condition: service_healthy
       auth-service:
         condition: service_healthy
       user-service:
@@ -94,14 +100,13 @@ services:
       post-service:
         condition: service_healthy
     restart: unless-stopped
-    volumes:
-      - comment-data:/app/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+
   nginx:
     image: nginx:alpine
     container_name: api-gateway
@@ -124,4 +129,5 @@ volumes:
   redis-data:
   auth-data:
   user-data:
+  post-data:
   comment-data:

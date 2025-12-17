@@ -1,93 +1,73 @@
-import os, time, httpx
-from typing import Optional
-from fastapi import FastAPI, Depends, HTTPException, status, Header
-from fastapi.responses import JSONResponse
-from sqlmodel import SQLModel, select
-from .deps import engine, SessionDep, get_current_user, AuthedUser
-from .models import UserProfile
-from .schemas import HealthResponse, DependencyHealth, ProfileOut, ProfileUpdate
+import os, uuid, httpx
+from typing import Dict, Optional
+from datetime import datetime, timezone
 
-AUTH_BASE = os.getenv("AUTH_SERVICE_BASE", "http://auth-service:8000")
+from fastapi import FastAPI, Depends, Header, HTTPException
+from sqlmodel import Session, select
 
-app = FastAPI(title="user-service")
+from .db import init_db, get_session
+from .models import Profile
+from .schemas import HealthResponse, DependencyHealth, Status, ProfileCreate, ProfileUpdate
+
+APP_NAME = "user-service"
+AUTH_SERVICE_BASE = os.getenv("AUTH_SERVICE_BASE", "http://auth-service:8000")
+
+app = FastAPI(title=APP_NAME)
 
 @app.on_event("startup")
-def on_startup():
-    SQLModel.metadata.create_all(engine)
+def startup():
+    init_db()
 
-# health (with dependency probe to auth-service)
+async def verify_token(authorization: Optional[str] = Header(None)) -> Dict:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    token = authorization.split(" ", 1)[1]
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.post(f"{AUTH_SERVICE_BASE}/auth/verify", json={"token": token})
+        if r.status_code != 200:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return r.json()
+
 @app.get("/health", response_model=HealthResponse)
 async def health():
-    deps = {}
-    overall = "healthy"
-    t0 = time.perf_counter()
+    deps: Dict[str, DependencyHealth] = {}
+    # auth-service
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get(f"{AUTH_BASE}/health")
-            r.raise_for_status()
-        deps["auth-service"] = DependencyHealth(status="healthy", response_time_ms=(time.perf_counter()-t0)*1000)
-    except httpx.HTTPError as exc:
-        overall = "unhealthy"
-        deps["auth-service"] = DependencyHealth(
-            status="unhealthy",
-            error=str(exc),
-            response_time_ms=(time.perf_counter()-t0)*1000
-        )
+        async with httpx.AsyncClient(timeout=5) as c:
+            r = await c.get(f"{AUTH_SERVICE_BASE}/health")
+            deps["auth-service"] = DependencyHealth(
+                status="healthy" if r.status_code == 200 else "unhealthy",
+                error=None if r.status_code == 200 else f"HTTP {r.status_code}",
+            )
+    except Exception as e:
+        deps["auth-service"] = DependencyHealth(status="unhealthy", error=str(e))
+    # db
+    try:
+        for _ in get_session(): pass
+        db_ok = True
+    except Exception as e:
+        deps["database"] = DependencyHealth(status="unhealthy", error=str(e))
+        db_ok = False
+    overall: Status = "healthy" if all(d.status=="healthy" for d in deps.values()) and db_ok else "unhealthy"
+    return HealthResponse(service=APP_NAME, status=overall, dependencies=deps)
 
-    payload = HealthResponse(service="user-service", status=overall, dependencies=deps)
-    code = 200 if overall == "healthy" else 503
-    return JSONResponse(status_code=code, content=payload.model_dump())
-
-# alias so /users/health works behind nginx with preserved prefix
-@app.get("/users/health", response_model=HealthResponse)
-async def health_alias():
-    return await health()
-
-# profiles
-@app.get("/users/me", response_model=ProfileOut)
-def get_me(
-    session: SessionDep,
-    authorization: Optional[str] = Header(default=None),
-):
-    user = get_current_user(authorization)
-    prof = session.exec(select(UserProfile).where(UserProfile.auth_user_id == user.user_id)).first()
-    if not prof:
-        # auto-provision a blank profile on first read
-        prof = UserProfile(auth_user_id=user.user_id)
-        session.add(prof)
-        session.commit()
-        session.refresh(prof)
-    return ProfileOut(id=prof.id, auth_user_id=prof.auth_user_id, display_name=prof.display_name, bio=prof.bio)
-
-@app.put("/users/me", response_model=ProfileOut)
-def update_me(
-    body: ProfileUpdate,
-    session: SessionDep,
-    authorization: Optional[str] = Header(default=None),
-):
-    user = get_current_user(authorization)
-    prof = session.exec(select(UserProfile).where(UserProfile.auth_user_id == user.user_id)).first()
-    if not prof:
-        prof = UserProfile(auth_user_id=user.user_id)
-        session.add(prof)
-        session.commit()
-        session.refresh(prof)
-    changed = False
-    if body.display_name is not None:
+# Minimal profile API used by others to validate existence
+@app.post("/users/me/profile", status_code=201)
+def upsert_my_profile(body: ProfileCreate, user=Depends(verify_token), session: Session = Depends(get_session)):
+    prof = session.exec(select(Profile).where(Profile.userId == user["user_id"])).first()
+    if prof:
         prof.display_name = body.display_name
-        changed = True
-    if body.bio is not None:
         prof.bio = body.bio
-        changed = True
-    if changed:
+        prof.updated_at = datetime.now(timezone.utc).isoformat()
+    else:
+        prof = Profile(id=str(uuid.uuid4()), userId=user["user_id"], display_name=body.display_name, bio=body.bio)
         session.add(prof)
-        session.commit()
-        session.refresh(prof)
-    return ProfileOut(id=prof.id, auth_user_id=prof.auth_user_id, display_name=prof.display_name, bio=prof.bio)
+    session.commit(); session.refresh(prof)
+    return prof
 
-@app.get("/users/{profile_id}", response_model=ProfileOut)
-def get_by_id(profile_id: int, session: SessionDep):
-    prof = session.get(UserProfile, profile_id)
+@app.get("/users/{user_id}")
+def get_profile_by_user_id(user_id: str, session: Session = Depends(get_session)):
+    prof = session.exec(select(Profile).where(Profile.userId == user_id)).first()
     if not prof:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    return ProfileOut(id=prof.id, auth_user_id=prof.auth_user_id, display_name=prof.display_name, bio=prof.bio)
+        raise HTTPException(status_code=404, detail="User profile not found")
+    return prof

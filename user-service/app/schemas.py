@@ -1,26 +1,20 @@
-from typing import Optional, Literal, Dict
+from typing import Optional, Dict, Literal
 from pydantic import BaseModel, Field
 
-# health models
-Status = Literal["healthy", "unhealthy"]
-
+Status = Literal["healthy","unhealthy"]
 class DependencyHealth(BaseModel):
     status: Status
     response_time_ms: Optional[float] = None
     error: Optional[str] = None
-
 class HealthResponse(BaseModel):
     service: str
     status: Status
-    dependencies: Dict[str, DependencyHealth] = Field(default_factory=dict)
+    dependencies: Dict[str, DependencyHealth]
 
-# profile schemas
-class ProfileOut(BaseModel):
-    id: int
-    auth_user_id: int
-    display_name: Optional[str] = None
-    bio: Optional[str] = None
+class ProfileCreate(BaseModel):
+    display_name: str = Field(..., min_length=1, max_length=80)
+    bio: Optional[str] = Field(None, max_length=1000)
 
 class ProfileUpdate(BaseModel):
-    display_name: Optional[str] = None
-    bio: Optional[str] = None
+    display_name: Optional[str] = Field(None, min_length=1, max_length=80)
+    bio: Optional[str] = Field(None, max_length=1000)
