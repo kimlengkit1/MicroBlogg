@@ -1,5 +1,5 @@
 import os, uuid, httpx
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Header, Body
 from sqlmodel import select, Session
 from datetime import datetime, timezone
 from typing import Dict, Optional
@@ -47,7 +47,7 @@ def login(body: LoginIn, session: Session = Depends(get_session)):
     return TokenOut(access_token=mint_token(u.id, u.email))
 
 @app.post("/auth/verify")
-def verify(payload: Dict):
+def verify(payload: Dict = Body(...)):
     token = payload.get("token")
     if not token:
         raise HTTPException(status_code=400, detail="token required")

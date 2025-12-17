@@ -7,7 +7,6 @@ services:
     volumes:
       - redis-data:/data
     healthcheck:
-      # 'redis-cli ping' returns PONG when healthy
       test: ["CMD-SHELL", "redis-cli ping || exit 1"]
       interval: 10s
       timeout: 5s
@@ -21,6 +20,8 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - AUTH_SECRET_KEY=dev-secret-change-me
+      - AUTH_ALGORITHM=HS256
     volumes:
       - auth-data:/app/data
     depends_on:
@@ -28,7 +29,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -42,6 +43,10 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - AUTH_SERVICE_BASE=http://auth-service:8000
+      # JWT verification (must match auth-service)
+      - AUTH_SECRET_KEY=dev-secret-change-me
+      - AUTH_ALGORITHM=HS256
+      # Database URL assumed default to sqlite:///data/user.db inside the container
     volumes:
       - user-data:/app/data
     depends_on:
@@ -51,7 +56,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -66,6 +71,10 @@ services:
       - REDIS_PORT=6379
       - AUTH_SERVICE_BASE=http://auth-service:8000
       - USER_SERVICE_BASE=http://user-service:8000
+      # JWT verification
+      - AUTH_SECRET_KEY=dev-secret-change-me
+      - AUTH_ALGORITHM=HS256
+      # Database URL assumed default to sqlite:///data/post.db
     volumes:
       - post-data:/app/data
     depends_on:
@@ -77,7 +86,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -89,7 +98,12 @@ services:
       dockerfile: Dockerfile
     environment:
       - AUTH_SERVICE_BASE=http://auth-service:8000
+      - USER_SERVICE_BASE=http://user-service:8000
       - POST_SERVICE_BASE=http://post-service:8000
+      # JWT verification
+      - AUTH_SECRET_KEY=dev-secret-change-me
+      - AUTH_ALGORITHM=HS256
+      # Database URL assumed default to sqlite:///data/comment.db
     volumes:
       - comment-data:/app/data
     depends_on:
@@ -101,7 +115,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5

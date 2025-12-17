@@ -24,10 +24,17 @@ async def verify_token(authorization: Optional[str] = Header(None)) -> Dict:
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
     token = authorization.split(" ", 1)[1]
     async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.post(f"{AUTH_SERVICE_BASE}/auth/verify", json={"token": token})
-        if r.status_code != 200:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        return r.json()  # {"user_id": "...", "email": "..."}    
+        try:
+            r = await client.post(f"{AUTH_SERVICE_BASE}/auth/verify", json={"token": token})
+            if r.status_code != 200:
+                # Log the actual error for debugging
+                error_detail = r.json().get("detail", "Unknown error") if r.status_code < 500 else "Auth service error"
+                raise HTTPException(status_code=401, detail=f"Invalid token: {error_detail}")
+            return r.json()  # {"user_id": "...", "email": "..."}
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
+        except Exception as e:
+            raise HTTPException(status_code=401, detail=f"Token verification failed: {str(e)}")    
 
 @app.get("/health", response_model=HealthResponse)
 async def health():

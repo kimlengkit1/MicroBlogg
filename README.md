@@ -1,421 +1,778 @@
 # MicroBlogg
-Microservice blog platform built with FastAPI. Its core features are a post service for creating and managing blogs, a comment service for threaded discussions, and a user authentication service for sign up, log in, and access control.
+
+A microservice-based blog platform built with FastAPI, featuring user authentication, blog posts, and comments. All services are containerized with Docker and communicate through an API Gateway (Nginx).
 
 ## Architecture Overview
 
-There are four FastAPI services, each running in its own container:
+MicroBlogg consists of four microservices, each running in its own Docker container:
 
-- **auth-service**
-    - Responsible for authentications, login, sign up
-    - `GET /health` with its own status.
-- **user-service**
-    - Responsible for profile displays and editing
-    - `GET /health` calls `auth-service /health` and reports both its own status and `auth-service` as a dependency.
-- **post-service**
-    - Responsible for blog posts features
-    - GET /health` calls `auth-service /health` and `user-service /health` and reports their statuses.
-- **comment-service**
-    - Responsible for comments on posts
-    - `GET /health` calls `user-service /health` and `post-service /health` and reports their statuses.
+### Services
 
-All services communicate over an internal Docker network using HTTP via `httpx`.
+- **auth-service** (Port 8000)
+  - Handles user authentication (signup, login, token verification)
+  - Uses JWT tokens for authentication
+  - SQLite database for user storage
+  - Health endpoint reports database status
+
+- **user-service** (Port 8000)
+  - Manages user profiles (display name, bio)
+  - Depends on auth-service for token verification
+  - SQLite database for profile storage
+  - Health endpoint reports auth-service and database status
+
+- **post-service** (Port 8000)
+  - Handles blog post CRUD operations
+  - Depends on auth-service for authentication
+  - SQLite database for post storage
+  - Health endpoint reports auth-service and database status
+
+- **comment-service** (Port 8000)
+  - Manages comments on posts
+  - Depends on auth-service for authentication and post-service to verify posts exist
+  - SQLite database for comment storage
+  - Health endpoint reports auth-service, post-service, and database status
+
+### Infrastructure
+
+- **Nginx API Gateway** (Port 8080)
+  - Routes all external requests to appropriate services
+  - Provides unified entry point at `http://localhost:8080`
+  - Load balancing ready for post-service scaling
+
+- **Redis** (Port 6379)
+  - Available for caching (currently configured but not actively used)
+
+### Communication
+
+- Services communicate over Docker's internal network using HTTP via `httpx`
+- All services use JWT tokens issued by auth-service for authentication
+- Health checks cascade: each service reports its dependencies' health status
 
 ## Prerequisites
 
-- **Docker** (Engine)
-- **Docker Compose** (v2 or integrated `docker compose` command)
-
-For running locally without Docker:
-
-- **Python** 3.11+
-- `pip` for installing Python dependencies
+- **Docker** (Engine 20.10+)
+- **Docker Compose** (v2.0+ or integrated `docker compose` command)
+- **curl** (for testing endpoints)
+- **jq** (optional, for pretty JSON output)
 
 ## Installation and Setup
 
-You can get this application via GitHub or via a zip file:
+### 1. Clone or Extract the Project
 
-**Zip File**
+```bash
+# If using git
+git clone https://github.com/kimlengkit1/MicroBlogg.git
+cd MicroBlogg
 
-unzip the milestone1_kimlengkit.zip
-```Terminal
-cd milestone1_kimlengkit.zip
+# Or extract from zip file
+unzip milestone1_kimlengkit.zip
+cd milestone1_kimlengkit
 ```
 
-**Clone the repository from GitHub**
+### 2. Build All Services
 
-```Terminal
-git clone <https://github.com/kimlengkit1/MicroBlogg.git>
-cd MICROBLOGG
-```
-
-**Build the services**
-
-```Terminal
+```bash
 docker compose build
 ```
 
-**Start all services**
-
-```Terminal
-docker compose up -d
-```
-
-**Verify containers are running**
-
-```Terminal
-docker compose ps
-```
-
-Check for contains:
+This will build all four microservices:
 - `auth-service`
 - `user-service`
 - `post-service`
 - `comment-service`
 
-**To View logs**
+### 3. Start All Services
 
-```Terminal
+```bash
+docker compose up -d
+```
+
+The `-d` flag runs containers in detached mode.
+
+### 4. Verify Services Are Running
+
+```bash
+docker compose ps
+```
+
+You should see all services with `(healthy)` status:
+- `microblogg-auth-service-1`
+- `microblogg-user-service-1`
+- `microblogg-post-service-1`
+- `microblogg-comment-service-1`
+- `api-gateway` (nginx)
+- `microblogg-redis-1`
+
+### 5. Check Service Logs (Optional)
+
+```bash
+# View all logs
 docker compose logs -f
+
+# View specific service logs
+docker compose logs -f auth-service
+docker compose logs -f user-service
+docker compose logs -f post-service
+docker compose logs -f comment-service
+```
+
+### 6. Stop Services
+
+```bash
+docker compose down
+```
+
+To also remove volumes (deletes all data):
+```bash
+docker compose down -v
 ```
 
 ## Usage Instructions
 
-### Starting the System
+### Base URL
 
-From the project root:
-
-```Terminal
-docker compose up -d --build
+All endpoints are accessible through the API Gateway at:
+```
+http://localhost:8080
 ```
 
-Check that the containers are healthy
+### Quick Start Example
 
-```Terminal
-docker compose ps
-```
-You should see `auth-service`, `user-service`, `post-service`, `comment-service`, and `api-gateway` (nginx) up and running. We won't be needing the `redis` and `api-gateway` for the `/health` endpoints currently. It is for later implementation of the project.
+```bash
+BASE="http://localhost:8080"
 
-### Health Check Endpoints
+# 1. Sign up
+curl -X POST "$BASE/auth/signup" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"SecurePassword123"}'
 
-Each service exposes a health endpoint:
-- `auth-service`: `GET /health`
-- `user-service`: `GET /health`
-- `post-service`: `GET /health`
-- `comment-service`: `GET /health`
+# 2. Login and get token
+TOKEN=$(curl -sS -X POST "$BASE/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"SecurePassword123"}' \
+  | python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
 
-Call them directly using `docker compose exec`:
+# 3. Create a post
+curl -X POST "$BASE/posts" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"My First Post","body":"This is my first blog post!"}'
 
-## Auth-service health
-```Terminal
-docker compose exec auth-service curl http://localhost:8000/health
-```
-or
-
-```Terminal
-docker compose exec auth-service curl http://localhost:8000/auth/health
-```
-
-### Nginx
-
-```Terminal
-  curl -sS -i http://localhost:8080/auth/health
+# 4. Create a comment
+curl -X POST "$BASE/comments" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"postId":"POST_ID_HERE","body":"Great post!"}'
 ```
 
+## API Endpoints
 
-status `"healthy"` with HTTP code `200`:
+### Authentication Service (`/auth`)
 
-```JSON
+#### Sign Up
+**POST** `/auth/signup`
+
+Create a new user account.
+
+**Request:**
+```json
 {
-  HTTP/1.1 200 OK
-  date: Tue, 16 Dec 2025 18:26:53 GMT
-  server: uvicorn
-  content-length: 145
-  content-type: application/json
+  "email": "user@example.com",
+  "password": "SecurePassword123"
+}
+```
 
-  {"service":"auth-service","status":"healthy","dependencies": {"database":     {"status":"healthy","response_time_ms":1.7119169933721423,"error":null}}}
+**Response (201 Created):**
+```json
+{
+  "id": "uuid-string",
+  "email": "user@example.com"
+}
+```
+
+**Example:**
+```bash
+curl -X POST "http://localhost:8080/auth/signup" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"SecurePassword123"}'
+```
+
+**Error Responses:**
+- `409 Conflict`: Email already registered
+- `422 Unprocessable Entity`: Invalid email or password format
+
+---
+
+#### Login
+**POST** `/auth/login`
+
+Authenticate and receive a JWT token.
+
+**Request:**
+```json
+{
+  "email": "user@example.com",
+  "password": "SecurePassword123"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer"
+}
+```
+
+**Example:**
+```bash
+curl -X POST "http://localhost:8080/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"SecurePassword123"}'
+```
+
+**Error Responses:**
+- `401 Unauthorized`: Invalid credentials
+
+---
+
+#### Verify Token
+**POST** `/auth/verify`
+
+Verify a JWT token and get user information.
+
+**Request:**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "user_id": "uuid-string",
+  "email": "user@example.com"
+}
+```
+
+**Example:**
+```bash
+curl -X POST "http://localhost:8080/auth/verify" \
+  -H "Content-Type: application/json" \
+  -d '{"token":"YOUR_TOKEN_HERE"}'
+```
+
+**Error Responses:**
+- `400 Bad Request`: Token required
+- `401 Unauthorized`: Invalid token
+
+---
+
+#### Health Check
+**GET** `/health` or `/auth/health`
+
+Check service health status.
+
+**Response (200 OK):**
+```json
+{
+  "service": "auth-service",
+  "status": "healthy",
+  "dependencies": {
+    "database": {
+      "status": "healthy",
+      "response_time_ms": 1.5,
+      "error": null
+    }
   }
-```
-
-or 
-
-```JSON
-{
-  HTTP/1.1 200 OK
-  Server: nginx/1.29.3
-  Date: Tue, 16 Dec 2025 18:27:41 GMT
-  Content-Type: application/json
-  Content-Length: 144
-  Connection: keep-alive
 }
 ```
 
-## Auth-service Sign up/Login
-
-Sign up:
-```Terminal
-  docker compose exec auth-service sh -lc 'curl -sS -i -X POST http://localhost:8000/auth/signup -H "Content-Type: application/json" -d "{\"email\":\"alice2@example.com\",\"password\":\"CorrectHorseBatteryStaple\"}"'
+**Example:**
+```bash
+curl "http://localhost:8080/health"
 ```
 
-Replace the email field or password file with the email and password you want to sign up with. It should return `HTTP/1.1 201 Created` if successful:
+---
 
-```JSON
+### User Service (`/users`)
+
+#### Create/Update Profile
+**POST** `/users/me/profile`  
+**Authentication:** Required (Bearer token)
+
+Create or update the authenticated user's profile.
+
+**Request:**
+```json
 {
-  HTTP/1.1 201 Created
-  date: Tue, 16 Dec 2025 18:27:06 GMT
-  server: uvicorn
-  content-length: 37
-  content-type: application/json
-
-  {"id":1,"email":"alice2@example.com"}
+  "display_name": "John Doe",
+  "bio": "Software developer and blogger"
 }
 ```
 
-Login:
-
-```Terminal
-docker compose exec auth-service sh -lc \
-'curl -sS -i -X POST http://localhost:8000/auth/login -H "Content-Type: application/json" -d "{\"email\":\"alice2@example.com\",\"password\":\"CorrectHorseBatteryStaple\"}"'
-```
-Return `HTTP/1.1 201 OK` if successful:
-
-```JSON
+**Response (201 Created):**
+```json
 {
-  HTTP/1.1 200 OK
-  date: Tue, 16 Dec 2025 18:27:13 GMT
-  server: uvicorn
-  content-length: 182
-  content-type: application/json
-
-  {"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiaWF0IjoxNzY1OTA5NjM0LCJleHAiOjE3NjU5MTMyMzR9.pbKpLa5P5pmDheFufq7dMGnBKhCwaoy7W3yScdIeiLw","token_type":"bearer"}
+  "id": "profile-uuid",
+  "userId": "user-uuid",
+  "display_name": "John Doe",
+  "bio": "Software developer and blogger",
+  "created_at": "2025-12-17T21:00:00.000Z",
+  "updated_at": null
 }
 ```
 
-### Nginx:
-
-Sign Up:
-
-```Terminal
-curl -sS -i -X POST http://localhost:8080/auth/signup -H "Content-Type: application/json" -d '{"email":"alice3@example.com","password":"CorrectHorseBatteryStaple"}'
+**Example:**
+```bash
+TOKEN="your-jwt-token-here"
+curl -X POST "http://localhost:8080/users/me/profile" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"display_name":"John Doe","bio":"Software developer"}'
 ```
 
-Return `HTTP/1.1 201 Created` if successful:
+**Error Responses:**
+- `401 Unauthorized`: Missing or invalid token
+- `422 Unprocessable Entity`: Validation error (display_name 1-80 chars, bio max 1000 chars)
 
-```JSON
+---
+
+#### Get User Profile by ID
+**GET** `/users/{user_id}`  
+**Authentication:** Not required
+
+Get a user's profile by their user ID.
+
+**Response (200 OK):**
+```json
 {
-  HTTP/1.1 201 Created
-  Server: nginx/1.29.3
-  Date: Tue, 16 Dec 2025 18:27:49 GMT
-  Content-Type: application/json
-  Content-Length: 37
-  Connection: keep-alive
-
-  {"id":2,"email":"alice3@example.com"}
-}
-```
-Login:
-
-```Terminal
-curl -sS -i -X POST http://localhost:8080/auth/login -H "Content-Type: application/json" -d '{"email":"alice3@example.com","password":"CorrectHorseBatteryStaple"}'
-```
-Return `HTTP/1.1 201 OK` if successful:
-
-```JSON
-{
-  HTTP/1.1 200 OK
-  Server: nginx/1.29.3
-  Date: Tue, 16 Dec 2025 18:27:55 GMT
-  Content-Type: application/json
-  Content-Length: 182
-  Connection: keep-alive
-
-{"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwiaWF0IjoxNzY1OTA5Njc1LCJleHAiOjE3NjU5MTMyNzV9.TXEZYOS7DGgPQY2o9lZK5oWxRHqFKsWJBq3UalskdYI","token_type":"bearer"}
+  "id": "profile-uuid",
+  "userId": "user-uuid",
+  "display_name": "John Doe",
+  "bio": "Software developer and blogger",
+  "created_at": "2025-12-17T21:00:00.000Z",
+  "updated_at": null
 }
 ```
 
-
-### User-service health
-
-```Terminal
-docker compose exec user-service curl -sS -i http://localhost:8000/health
-```
-or
-```Terminal
-docker compose exec user-service curl -sS -i http://localhost:8000/users/health
+**Example:**
+```bash
+curl "http://localhost:8080/users/USER_ID_HERE"
 ```
 
-status `"healthy"` with HTTP code `200`:
+**Error Responses:**
+- `404 Not Found`: User profile not found
 
-```JSON
+---
+
+#### Health Check
+**GET** `/users/health`
+
+Check service health status.
+
+**Response (200 OK):**
+```json
 {
-  HTTP/1.1 200 OK
-  date: Tue, 16 Dec 2025 19:02:37 GMT
-  server: uvicorn
-  content-length: 148
-  content-type: application/json
-
-  {"service":"user-service","status":"healthy","dependencies":{"auth-service":{"status":"healthy","response_time_ms":11.68166595743969,"error":null}}}
-}
-```
-status `"unhealthy"` with HTTP code `503`.
-
-### Via Nginx:
-
-```Terminal
-curl -sS -i http://localhost:8080/users/health
-```
-
-If successful:
-
-```JSON
-{
-  HTTP/1.1 200 OK
-  Server: nginx/1.29.3
-  Date: Tue, 16 Dec 2025 19:02:51 GMT
-  Content-Type: application/json
-  Content-Length: 149
-  Connection: keep-alive
-
-  {"service":"user-service","status":"healthy","dependencies":{"auth-service":{"status":"healthy","response_time_ms":18.958040978759527,"error":null}}}
+  "service": "user-service",
+  "status": "healthy",
+  "dependencies": {
+    "auth-service": {
+      "status": "healthy",
+      "response_time_ms": 12.5,
+      "error": null
+    }
+  }
 }
 ```
 
-## User-service Profile
-
-Create an account if an account doesn't exist:
-
-```Terminal
-curl -sS -X POST http://localhost:8080/auth/signup -H "Content-Type: application/json" -d '{"email":"bob@example.com","password":"CorrectHorseBatteryStaple"}'
-{"id":3,"email":"bob@example.com"}
-```
-Login and get the TOKEN access key:
-
-```Terminal
-TOKEN=$(curl -sS -X POST http://localhost:8080/auth/login -H "Content-Type: application/json" -d '{"email":"bob@example.com","password":"CorrectHorseBatteryStaple"}' | python3 -c 'import sys, json; print(json.load(sys.stdin)["access_token"])')
-echo "$TOKEN"
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwiaWF0IjoxNzY1OTExODk4LCJleHAiOjE3NjU5MTU0OTh9.5CRqRBPPVBTXRpuhhJ7fyKmst-iNrdjDaRrpBRwD1gU
+**Example:**
+```bash
+curl "http://localhost:8080/users/health"
 ```
 
-Check account:
+---
 
-```Terminal
-curl -sS -i http://localhost:8080/users/me
-```
+### Post Service (`/posts`)
 
-If successful:
+#### Create Post
+**POST** `/posts`  
+**Authentication:** Required (Bearer token)
 
-```JSON
+Create a new blog post.
+
+**Request:**
+```json
 {
-  HTTP/1.1 200 OK
-  Server: nginx/1.29.3
-  Date: Tue, 16 Dec 2025 19:07:09 GMT
-  Content-Type: application/json
-  Content-Length: 56
-  Connection: keep-alive
-
-  {"id":1,"auth_user_id":3,"display_name":null,"bio":null}
+  "title": "My First Blog Post",
+  "body": "This is the content of my blog post..."
 }
 ```
 
-Edit Profile:
-
-```Terminal
-curl -sS -i -X PUT http://localhost:8080/users/me -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"display_name":"Bob B.","bio":"I like distributed systems."}'
-```
-
-If successful:
-
-```JSON
+**Response (201 Created):**
+```json
 {
-  HTTP/1.1 200 OK
-  Server: nginx/1.29.3
-  Date: Tue, 16 Dec 2025 19:08:00 GMT
-  Content-Type: application/json
-  Content-Length: 85
-  Connection: keep-alive
-
-  {"id":1,"auth_user_id":3,"display_name":"Bob B.","bio":"I like distributed systems."}
+  "id": "post-uuid",
+  "authorId": "user-uuid",
+  "title": "My First Blog Post",
+  "body": "This is the content of my blog post...",
+  "created_at": "2025-12-17T21:00:00.000Z",
+  "updated_at": null
 }
 ```
 
-Profile Lookup by id:
-
-```Terminal
-curl -sS -i http://localhost:8080/users/1
+**Example:**
+```bash
+TOKEN="your-jwt-token-here"
+curl -X POST "http://localhost:8080/posts" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"My First Post","body":"Post content here"}'
 ```
 
-If successful:
+**Error Responses:**
+- `401 Unauthorized`: Missing or invalid token
+- `422 Unprocessable Entity`: Validation error (title 1-200 chars, body 1-100000 chars)
 
-```JSON
+---
+
+#### Get Post by ID
+**GET** `/posts/{post_id}`  
+**Authentication:** Not required
+
+Get a post by its ID.
+
+**Response (200 OK):**
+```json
 {
-  HTTP/1.1 200 OK
-  Server: nginx/1.29.3
-  Date: Tue, 16 Dec 2025 19:08:18 GMT
-  Content-Type: application/json
-  Content-Length: 85
-  Connection: keep-alive
-  
-  {"id":1,"auth_user_id":3,"display_name":"Bob B.","bio":"I like distributed systems."}
+  "id": "post-uuid",
+  "authorId": "user-uuid",
+  "title": "My First Blog Post",
+  "body": "This is the content of my blog post...",
+  "created_at": "2025-12-17T21:00:00.000Z",
+  "updated_at": null
 }
 ```
-### post-service health
-```Terminal
-docker compose exec post-service curl http://localhost:8000/health
-```
-status `"healthy"` with HTTP code `200`:
 
-```JSON
+**Example:**
+```bash
+curl "http://localhost:8080/posts/POST_ID_HERE"
+```
+
+**Error Responses:**
+- `404 Not Found`: Post not found
+
+---
+
+#### List Posts
+**GET** `/posts?limit={limit}&offset={offset}`  
+**Authentication:** Not required
+
+List posts with pagination.
+
+**Query Parameters:**
+- `limit` (optional): Number of posts to return (1-100, default: 50)
+- `offset` (optional): Number of posts to skip (default: 0)
+
+**Response (200 OK):**
+```json
+[
+  {
+    "id": "post-uuid",
+    "authorId": "user-uuid",
+    "title": "My First Blog Post",
+    "body": "This is the content...",
+    "created_at": "2025-12-17T21:00:00.000Z",
+    "updated_at": null
+  }
+]
+```
+
+**Example:**
+```bash
+curl "http://localhost:8080/posts?limit=10&offset=0"
+```
+
+---
+
+#### Update Post
+**PUT** `/posts/{post_id}`  
+**Authentication:** Required (Bearer token, must be post author)
+
+Update a post. Only the post author can update their posts.
+
+**Request:**
+```json
+{
+  "title": "Updated Title",
+  "body": "Updated content"
+}
+```
+Note: Both fields are optional - include only what you want to update.
+
+**Response (200 OK):**
+```json
+{
+  "id": "post-uuid",
+  "authorId": "user-uuid",
+  "title": "Updated Title",
+  "body": "Updated content",
+  "created_at": "2025-12-17T21:00:00.000Z",
+  "updated_at": "2025-12-17T21:05:00.000Z"
+}
+```
+
+**Example:**
+```bash
+TOKEN="your-jwt-token-here"
+curl -X PUT "http://localhost:8080/posts/POST_ID_HERE" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Updated Title"}'
+```
+
+**Error Responses:**
+- `401 Unauthorized`: Missing or invalid token
+- `403 Forbidden`: Not the post author
+- `404 Not Found`: Post not found
+
+---
+
+#### Delete Post
+**DELETE** `/posts/{post_id}`  
+**Authentication:** Required (Bearer token, must be post author)
+
+Delete a post. Only the post author can delete their posts.
+
+**Response (204 No Content):**
+
+**Example:**
+```bash
+TOKEN="your-jwt-token-here"
+curl -X DELETE "http://localhost:8080/posts/POST_ID_HERE" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**Error Responses:**
+- `401 Unauthorized`: Missing or invalid token
+- `403 Forbidden`: Not the post author
+- `404 Not Found`: Post not found
+
+---
+
+#### Health Check
+**GET** `/posts/health`
+
+Check service health status.
+
+**Response (200 OK):**
+```json
 {
   "service": "post-service",
   "status": "healthy",
   "dependencies": {
     "auth-service": {
       "status": "healthy",
-      "response_time_ms": 10.1,
-      "error": null
-    },
-    "user-service": {
-      "status": "healthy",
-      "response_time_ms": 13.4,
+      "response_time_ms": 8.5,
       "error": null
     }
   }
 }
 ```
 
-status `"unhealthy"` with HTTP code `503`:
-```JSON
+**Example:**
+```bash
+curl "http://localhost:8080/posts/health"
+```
+
+---
+
+### Comment Service (`/comments`)
+
+#### Create Comment
+**POST** `/comments`  
+**Authentication:** Required (Bearer token)
+
+Create a comment on a post.
+
+**Request:**
+```json
 {
-  "service": "post-service",
-  "status": "unhealthy",
-  "dependencies": {
-    "auth-service": {
-      "status": "unhealthy",
-      "response_time_ms": 201.9,
-      "error": "ConnectTimeout: GET http://auth-service:8000/health timed out"
-    },
-    "user-service": {
-      "status": "healthy",
-      "response_time_ms": 12.7,
-      "error": null
-    }
-  }
+  "postId": "post-uuid-string",
+  "body": "This is my comment on the post!"
 }
 ```
 
-comment-service health
-```Terminal
-docker compose exec comment-service curl http://localhost:8000/health
+**Response (201 Created):**
+```json
+{
+  "id": "comment-uuid",
+  "postId": "post-uuid-string",
+  "authorId": "user-uuid",
+  "body": "This is my comment on the post!",
+  "created_at": "2025-12-17T21:00:00.000Z",
+  "updated_at": null
+}
 ```
-status `"healthy"` with HTTP code `200`:
 
-```JSON
+**Example:**
+```bash
+TOKEN="your-jwt-token-here"
+curl -X POST "http://localhost:8080/comments" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"postId":"POST_ID_HERE","body":"Great post!"}'
+```
+
+**Error Responses:**
+- `400 Bad Request`: Post does not exist
+- `401 Unauthorized`: Missing or invalid token
+- `422 Unprocessable Entity`: Validation error (body 1-10000 chars)
+
+---
+
+#### Get Comment by ID
+**GET** `/comments/{comment_id}`  
+**Authentication:** Not required
+
+Get a comment by its ID.
+
+**Response (200 OK):**
+```json
+{
+  "id": "comment-uuid",
+  "postId": "post-uuid-string",
+  "authorId": "user-uuid",
+  "body": "This is my comment on the post!",
+  "created_at": "2025-12-17T21:00:00.000Z",
+  "updated_at": null
+}
+```
+
+**Example:**
+```bash
+curl "http://localhost:8080/comments/COMMENT_ID_HERE"
+```
+
+**Error Responses:**
+- `404 Not Found`: Comment not found
+
+---
+
+#### List Comments
+**GET** `/comments?postId={post_id}&limit={limit}&offset={offset}`  
+**Authentication:** Not required
+
+List comments, optionally filtered by post ID.
+
+**Query Parameters:**
+- `postId` (optional): Filter comments by post ID
+- `limit` (optional): Number of comments to return (1-100, default: 50)
+- `offset` (optional): Number of comments to skip (default: 0)
+
+**Response (200 OK):**
+```json
+[
+  {
+    "id": "comment-uuid",
+    "postId": "post-uuid-string",
+    "authorId": "user-uuid",
+    "body": "This is my comment!",
+    "created_at": "2025-12-17T21:00:00.000Z",
+    "updated_at": null
+  }
+]
+```
+
+**Example:**
+```bash
+# List all comments
+curl "http://localhost:8080/comments?limit=10&offset=0"
+
+# List comments for a specific post
+curl "http://localhost:8080/comments?postId=POST_ID_HERE&limit=10&offset=0"
+```
+
+---
+
+#### Update Comment
+**PUT** `/comments/{comment_id}`  
+**Authentication:** Required (Bearer token, must be comment author)
+
+Update a comment. Only the comment author can update their comments.
+
+**Request:**
+```json
+{
+  "body": "Updated comment text"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": "comment-uuid",
+  "postId": "post-uuid-string",
+  "authorId": "user-uuid",
+  "body": "Updated comment text",
+  "created_at": "2025-12-17T21:00:00.000Z",
+  "updated_at": "2025-12-17T21:05:00.000Z"
+}
+```
+
+**Example:**
+```bash
+TOKEN="your-jwt-token-here"
+curl -X PUT "http://localhost:8080/comments/COMMENT_ID_HERE" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"body":"Updated comment"}'
+```
+
+**Error Responses:**
+- `401 Unauthorized`: Missing or invalid token
+- `403 Forbidden`: Not the comment author
+- `404 Not Found`: Comment not found
+
+---
+
+#### Delete Comment
+**DELETE** `/comments/{comment_id}`  
+**Authentication:** Required (Bearer token, must be comment author)
+
+Delete a comment. Only the comment author can delete their comments.
+
+**Response (204 No Content):**
+
+**Example:**
+```bash
+TOKEN="your-jwt-token-here"
+curl -X DELETE "http://localhost:8080/comments/COMMENT_ID_HERE" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**Error Responses:**
+- `401 Unauthorized`: Missing or invalid token
+- `403 Forbidden`: Not the comment author
+- `404 Not Found`: Comment not found
+
+---
+
+#### Health Check
+**GET** `/comments/health`
+
+Check service health status.
+
+**Response (200 OK):**
+```json
 {
   "service": "comment-service",
   "status": "healthy",
   "dependencies": {
-    "user-service": {
+    "auth-service": {
       "status": "healthy",
-      "response_time_ms": 9.8,
+      "response_time_ms": 2.5,
       "error": null
     },
     "post-service": {
@@ -426,159 +783,187 @@ status `"healthy"` with HTTP code `200`:
   }
 }
 ```
-status `"unhealthy"` with HTTP code `503`:
 
-```JSON
-{
-  "service": "comment-service",
-  "status": "unhealthy",
-  "dependencies": {
-    "user-service": {
-      "status": "healthy",
-      "response_time_ms": 11.4,
-      "error": null
-    },
-    "post-service": {
-      "status": "unhealthy",
-      "response_time_ms": 48.3,
-      "error": "HTTPStatusError: 503 from /health"
-    }
-  }
-}
-
+**Example:**
+```bash
+curl "http://localhost:8080/comments/health"
 ```
 
-If a dependency is unhealthy or unreachable, the `status` field will be `"unhealthy"` and the HTTP status code will be `503`. Otherwise, the `status` is `"healthy"` and the HTTP status code will be `200`.
-
-## Posting Service
-
-1. Create an account.
-2. Login 
-3. Post services (writes require JWT)
-
-```Terminal
-# create
-NEW_POST=$(
-  curl -sS -X POST $BASE/posts \
-    -H "Authorization: Bearer $TOKEN" \
-    -H "Content-Type: application/json" \
-    -d '{"title":"Hello","body":"My first blog post"}'
-)
-echo "$NEW_POST" | jq .
-POST_ID=$(echo "$NEW_POST" | jq -r .id)
-echo "POST_ID=$POST_ID"
-
-# get by id
-curl -sS $BASE/posts/$POST_ID | jq .
-
-# list (should include the new one)
-curl -sS "$BASE/posts?limit=20&offset=0" | jq .
-
-# update title
-curl -sS -X PUT $BASE/posts/$POST_ID \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"title":"Hello v2"}' | jq .
-
-# delete
-curl -sS -X DELETE $BASE/posts/$POST_ID \
-  -H "Authorization: Bearer $TOKEN" -i
-echo; echo "verify 404 after delete:"
-curl -sS -i $BASE/posts/$POST_ID | sed -n '1,1p'
-
-```
-
-### Stopping the System
-
-```Terminal
-docker compose down
-```
+---
 
 ## Testing
 
-The system can be tested manually through `curl` or any HTTP client (example: browser).
+### Automated Test Script
 
-Confirm that each service responds to `/health` by including in the terminal:
+A comprehensive test script is provided to test all endpoints:
 
-```Terminal
-curl http://localhost:8001/health
-curl http://localhost:8002/health
-curl http://localhost:8003/health
-curl http://localhost:8004/health
+```bash
+bash test-all-endpoints.sh
 ```
 
-Simulate failures by stopping one service and check how its dependents respond:
+This script will:
+1. Test all health check endpoints
+2. Test authentication (signup, login, verify)
+3. Test user profile management
+4. Test post CRUD operations
+5. Test comment CRUD operations
+6. Clean up test data
 
-```Terminal
-docker compose stop auth-service
-```
+### Manual Testing Workflow
 
-user-service should now report auth-service as unhealthy
-```Terminal
-curl http://localhost:8002/health
-```
+```bash
+BASE="http://localhost:8080"
 
-user-service should now also be unhealthy
-```Terminal
-curl http://localhost:8003/health
-```
+# 1. Sign up
+curl -X POST "$BASE/auth/signup" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"TestPassword123"}'
 
-Restart the service:
-```Terminal
-docker compose start auth-service
+# 2. Login and get token
+TOKEN=$(curl -sS -X POST "$BASE/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"TestPassword123"}' \
+  | python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
+
+# 3. Create profile
+curl -X POST "$BASE/users/me/profile" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"display_name":"Test User","bio":"Test bio"}'
+
+# 4. Create a post
+POST_RESPONSE=$(curl -sS -X POST "$BASE/posts" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Test Post","body":"Post content"}')
+POST_ID=$(echo "$POST_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])")
+
+# 5. Create a comment
+curl -X POST "$BASE/comments" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"postId\": \"$POST_ID\", \"body\": \"Great post!\"}"
 ```
 
 ## Project Structure
 
-```text
-MICROBLOGG (milestone1_kimlengkit)/
+```
+MicroBlogg/
 ├── auth-service/
 │   ├── app/
-│   │   ├── health_models.py
-│   │   └── main.py
+│   │   ├── main.py          # FastAPI app and routes
+│   │   ├── models.py        # User model
+│   │   ├── schemas.py       # Request/response models
+│   │   ├── security.py      # Password hashing and JWT
+│   │   └── db.py            # Database setup
+│   ├── Dockerfile
+│   └── requirements.txt
+├── user-service/
+│   ├── app/
+│   │   ├── main.py          # FastAPI app and routes
+│   │   ├── models.py        # Profile model
+│   │   ├── schemas.py       # Request/response models
+│   │   └── db.py            # Database setup
+│   ├── Dockerfile
+│   └── requirements.txt
+├── post-service/
+│   ├── app/
+│   │   ├── main.py          # FastAPI app and routes
+│   │   ├── models.py        # Post model
+│   │   ├── schemas.py       # Request/response models
+│   │   └── db.py            # Database setup
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── comment-service/
 │   ├── app/
-│   │   ├── health_models.py
-│   │   └── main.py
+│   │   ├── main.py          # FastAPI app and routes
+│   │   ├── models.py        # Comment model
+│   │   ├── schemas.py       # Request/response models
+│   │   └── db.py            # Database setup
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── nginx/
-│   └── nginx.conf
-├── post-service/
-│   ├── app/
-│   │   ├── health_models.py
-│   │   └── main.py
-│   ├── Dockerfile
-│   └── requirements.txt
-├── user-service/
-│   ├── app/                      
-│   ├── Dockerfile
-│   └── requirements.txt
-├── .gitignore
-├── architecture-diagram.md       
-├── architecture-diagram.png      
-├── architecture-document.md       
-├── CODE_PROVENANCE.md
-├── docker-compose.yml
-├── LICENSE
-└── README.md
+│   └── nginx.conf           # API Gateway configuration
+├── docker-compose.yml       # Service orchestration
+├── test-all-endpoints.sh    # Comprehensive test script
+└── README.md                # This file
 ```
-
-- `*-service/app/main.py` is where FastAPI app expose `GET /health`
-- `*-service/app/health_models.py` is the Pydantic models for `HealthResponse`, `DependencyHealth`, and `Status`
-- `*-service/app/requirements.txt` is the dependencies that the service requires
-- `*-service/app/Dockerfile` is the container build for each service
-- `docker-compose.yml` orchestrates services on a shared Docker network
-- `nginx/nginx.conf` the API gateway
-- `architecture-diagram.md/.png` is a visual of health-check interactions
-- `architecture-document.md` is the system architecture document 
-- `CODE_PROVENANCE.md` is the prompts/tools where AI outputs were used and non-AI sources
 
 ## Troubleshooting
 
-- If port 8080 is already in use, use 8088:80 in docker-compose.yml or any free port
-- If service(s) is/are unhealthy: run ```Terminal
-docker compose logs --tail=200 <service>``` to see the startup errors
-  - Verify `uvicorn app.main:app`, `/health` route, and `curl` are available for the healthcheck
+### Port Already in Use
+
+If port 8080 is already in use, change it in `docker-compose.yml`:
+
+```yaml
+nginx:
+  ports:
+    - "8088:80"  # Change 8080 to any free port
+```
+
+### Services Not Starting
+
+Check service logs:
+```bash
+docker compose logs auth-service
+docker compose logs user-service
+docker compose logs post-service
+docker compose logs comment-service
+```
+
+### Services Unhealthy
+
+1. Check if all dependencies are running:
+   ```bash
+   docker compose ps
+   ```
+
+2. Verify health endpoints:
+   ```bash
+   curl http://localhost:8080/health
+   curl http://localhost:8080/auth/health
+   curl http://localhost:8080/users/health
+   curl http://localhost:8080/posts/health
+   curl http://localhost:8080/comments/health
+   ```
+
+3. Restart services:
+   ```bash
+   docker compose restart
+   ```
+
+### Token Verification Issues
+
+If you get "Invalid token" errors:
+1. Ensure all services use the same `AUTH_SECRET_KEY` (set in `docker-compose.yml`)
+2. Check that tokens haven't expired (default: 60 minutes)
+3. Verify the token format: `Authorization: Bearer <token>`
+
+### Database Issues
+
+If you need to reset databases:
+```bash
+# Stop and remove volumes
+docker compose down -v
+
+# Restart services (will create fresh databases)
+docker compose up -d
+```
+
+## Environment Variables
+
+Key environment variables (set in `docker-compose.yml`):
+
+- `AUTH_SECRET_KEY`: JWT signing secret (must match across all services)
+- `AUTH_ALGORITHM`: JWT algorithm (default: HS256)
+- `AUTH_SERVICE_BASE`: Internal URL for auth-service
+- `USER_SERVICE_BASE`: Internal URL for user-service
+- `POST_SERVICE_BASE`: Internal URL for post-service
+
+## License
+
+See LICENSE file for details.
+
+## Contributing
+
+This is a milestone project. For issues or questions, please refer to the project documentation.

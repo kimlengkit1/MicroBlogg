@@ -34,10 +34,13 @@ async def verify_token_and_get_user(authorization: Optional[str] = Header(None))
         try:
             r = await client.post(url, json={"token": token})
             if r.status_code != 200:
-                raise HTTPException(status_code=401, detail="Invalid token")
+                error_detail = r.json().get("detail", "Unknown error") if r.status_code < 500 else "Auth service error"
+                raise HTTPException(status_code=401, detail=f"Invalid token: {error_detail}")
             return r.json()  # {"user_id": "...", "email": "..."}
-        except httpx.RequestError:
-            raise HTTPException(status_code=503, detail="auth-service unavailable")
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=503, detail=f"auth-service unavailable: {str(e)}")
+        except Exception as e:
+            raise HTTPException(status_code=401, detail=f"Token verification failed: {str(e)}")
 
 async def ensure_post_exists(post_id: str) -> None:
     url = f"{POST_SERVICE_BASE}/posts/{post_id}"
