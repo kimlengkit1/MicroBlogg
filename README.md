@@ -450,6 +450,44 @@ status `"unhealthy"` with HTTP code `503`:
 
 If a dependency is unhealthy or unreachable, the `status` field will be `"unhealthy"` and the HTTP status code will be `503`. Otherwise, the `status` is `"healthy"` and the HTTP status code will be `200`.
 
+## Posting Service
+
+1. Create an account.
+2. Login 
+3. Post services (writes require JWT)
+
+```Terminal
+# create
+NEW_POST=$(
+  curl -sS -X POST $BASE/posts \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"title":"Hello","body":"My first blog post"}'
+)
+echo "$NEW_POST" | jq .
+POST_ID=$(echo "$NEW_POST" | jq -r .id)
+echo "POST_ID=$POST_ID"
+
+# get by id
+curl -sS $BASE/posts/$POST_ID | jq .
+
+# list (should include the new one)
+curl -sS "$BASE/posts?limit=20&offset=0" | jq .
+
+# update title
+curl -sS -X PUT $BASE/posts/$POST_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Hello v2"}' | jq .
+
+# delete
+curl -sS -X DELETE $BASE/posts/$POST_ID \
+  -H "Authorization: Bearer $TOKEN" -i
+echo; echo "verify 404 after delete:"
+curl -sS -i $BASE/posts/$POST_ID | sed -n '1,1p'
+
+```
+
 ### Stopping the System
 
 ```Terminal
