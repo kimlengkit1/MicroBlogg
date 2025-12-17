@@ -82,10 +82,7 @@ services:
       context: ./comment-service
       dockerfile: Dockerfile
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
       - AUTH_SERVICE_BASE=http://auth-service:8000
-      - USER_SERVICE_BASE=http://user-service:8000
       - POST_SERVICE_BASE=http://post-service:8000
     depends_on:
       redis:
@@ -97,6 +94,8 @@ services:
       post-service:
         condition: service_healthy
     restart: unless-stopped
+    volumes:
+      - comment-data:/app/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -125,3 +124,4 @@ volumes:
   redis-data:
   auth-data:
   user-data:
+  comment-data:
