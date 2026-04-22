@@ -65,8 +65,9 @@ git clone https://github.com/kimlengkit1/MicroBlogg.git
 cd MicroBlogg
 
 # Or extract from zip file
-unzip milestone1_kimlengkit.zip
-cd milestone1_kimlengkit
+unzip 33834069_CapstoneProject.zip
+cd 33834069_CapstoneProject
+cd MicroBlogg
 ```
 
 ### 2. Build All Services

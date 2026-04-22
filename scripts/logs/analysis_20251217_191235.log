@@ -1,0 +1,78 @@
+2025-12-17T19:12:35-05:00 Starting analysis. BASE=http://localhost:8080
+------------------------------------------------------------
+2025-12-17T19:12:35-05:00 Warm up gateway and service health endpoints
+2025-12-17T19:12:35-05:00   GET /health -> 200
+2025-12-17T19:12:35-05:00   GET /auth/health -> 200
+2025-12-17T19:12:35-05:00   GET /users/health -> 200
+2025-12-17T19:12:35-05:00   GET /posts/health -> 200
+2025-12-17T19:12:35-05:00   GET /comments/health -> 200
+------------------------------------------------------------
+2025-12-17T19:12:35-05:00 Baseline latency for /posts/health (ITER=10)
+2025-12-17T19:12:35-05:00   sample#1 ttfb=0.008253s total=0.008328s code=200
+2025-12-17T19:12:35-05:00   sample#2 ttfb=0.007636s total=0.007682s code=200
+2025-12-17T19:12:35-05:00   sample#3 ttfb=0.007711s total=0.007753s code=200
+2025-12-17T19:12:35-05:00   sample#4 ttfb=0.007741s total=0.007796s code=200
+2025-12-17T19:12:35-05:00   sample#5 ttfb=0.007551s total=0.007593s code=200
+2025-12-17T19:12:35-05:00   sample#6 ttfb=0.007625s total=0.007682s code=200
+2025-12-17T19:12:35-05:00   sample#7 ttfb=0.010306s total=0.010358s code=200
+2025-12-17T19:12:35-05:00   sample#8 ttfb=0.011410s total=0.011470s code=200
+2025-12-17T19:12:35-05:00   sample#9 ttfb=0.007439s total=0.007483s code=200
+2025-12-17T19:12:35-05:00   sample#10 ttfb=0.007611s total=0.007656s code=200
+2025-12-17T19:12:35-05:00 Baseline mean TTFB=0.0083s, mean total=0.0084s
+------------------------------------------------------------
+2025-12-17T19:12:35-05:00 Enable chaos on post-service: fail_rate=0.10, delay=100ms @0.30
+{"detail":"Not Found"}
+2025-12-17T19:12:47-05:00 Latency under chaos for /posts/health (ITER=10)
+2025-12-17T19:12:47-05:00   sample#1 ttfb=0.012956s total=0.013026s code=200
+2025-12-17T19:12:47-05:00   sample#2 ttfb=0.009463s total=0.009554s code=200
+2025-12-17T19:12:47-05:00   sample#3 ttfb=0.010102s total=0.010164s code=200
+2025-12-17T19:12:47-05:00   sample#4 ttfb=0.008479s total=0.008536s code=200
+2025-12-17T19:12:47-05:00   sample#5 ttfb=0.008252s total=0.008317s code=200
+2025-12-17T19:12:47-05:00   sample#6 ttfb=0.008177s total=0.008226s code=200
+2025-12-17T19:12:47-05:00   sample#7 ttfb=0.007568s total=0.007615s code=200
+2025-12-17T19:12:47-05:00   sample#8 ttfb=0.007665s total=0.007712s code=200
+2025-12-17T19:12:47-05:00   sample#9 ttfb=0.007656s total=0.007711s code=200
+2025-12-17T19:12:47-05:00   sample#10 ttfb=0.011515s total=0.011570s code=200
+2025-12-17T19:12:47-05:00 Chaos mean TTFB=0.0092s, mean total=0.0092s
+2025-12-17T19:12:47-05:00 Parallel snapshot under chaos: 100 requests
+  100 x 200
+------------------------------------------------------------
+2025-12-17T19:12:47-05:00 Disable chaos on post-service
+{"detail":"Not Found"}
+------------------------------------------------------------
+2025-12-17T19:12:47-05:00 Scale post-service to 2 replicas
+NAME                           IMAGE                        COMMAND                  SERVICE           CREATED              STATUS                   PORTS
+api-gateway                    nginx:alpine                 "/docker-entrypoint.…"   nginx             About a minute ago   Up About a minute        0.0.0.0:8080->80/tcp, [::]:8080->80/tcp
+microblogg-auth-service-1      microblogg-auth-service      "uvicorn app.main:ap…"   auth-service      3 hours ago          Up 2 hours (healthy)     
+microblogg-comment-service-1   microblogg-comment-service   "uvicorn app.main:ap…"   comment-service   2 hours ago          Up 2 hours (healthy)     8000/tcp
+microblogg-post-service-1      microblogg-post-service      "uvicorn app.main:ap…"   post-service      2 hours ago          Up 2 hours (healthy)     
+microblogg-post-service-2      microblogg-post-service      "uvicorn app.main:ap…"   post-service      10 seconds ago       Up 8 seconds (healthy)   
+microblogg-redis-1             redis:7-alpine               "docker-entrypoint.s…"   redis             3 hours ago          Up 3 hours (healthy)     6379/tcp
+microblogg-user-service-1      microblogg-user-service      "uvicorn app.main:ap…"   user-service      2 hours ago          Up 2 hours (healthy)     
+2025-12-17T19:12:58-05:00 Parallel snapshot after scale-out: 100 requests
+  100 x 200
+------------------------------------------------------------
+2025-12-17T19:12:58-05:00 Stop one post-service replica (simulate instance failure)
+4cf644befcb5
+9f836a596bf2 microblogg-post-service-1 Up 2 hours (healthy)
+2025-12-17T19:13:01-05:00 Requests still succeed via LB? 100 requests
+  100 x 200
+------------------------------------------------------------
+2025-12-17T19:13:06-05:00 Stop auth-service (simulate dependency outage) and observe health propagation
+2025-12-17T19:13:09-05:00 Check /posts/health with auth down
+{"service":"post-service","status":"unhealthy","dependencies":{"auth-service":{"status":"unhealthy","response_time_ms":null,"error":"[Errno -2] Name or service not known"}}}2025-12-17T19:13:09-05:00 Restart auth-service
+------------------------------------------------------------
+2025-12-17T19:13:11-05:00 Restore post-service to single replica
+NAME                           IMAGE                        COMMAND                  SERVICE           CREATED              STATUS                   PORTS
+api-gateway                    nginx:alpine                 "/docker-entrypoint.…"   nginx             About a minute ago   Up About a minute        0.0.0.0:8080->80/tcp, [::]:8080->80/tcp
+microblogg-auth-service-1      microblogg-auth-service      "uvicorn app.main:ap…"   auth-service      3 hours ago          Up 9 seconds (healthy)   
+microblogg-comment-service-1   microblogg-comment-service   "uvicorn app.main:ap…"   comment-service   2 hours ago          Up 2 hours (healthy)     8000/tcp
+microblogg-post-service-1      microblogg-post-service      "uvicorn app.main:ap…"   post-service      2 hours ago          Up 2 hours (healthy)     
+microblogg-redis-1             redis:7-alpine               "docker-entrypoint.s…"   redis             3 hours ago          Up 3 hours (healthy)     6379/tcp
+microblogg-user-service-1      microblogg-user-service      "uvicorn app.main:ap…"   user-service      2 hours ago          Up 2 hours (healthy)     
+------------------------------------------------------------
+2025-12-17T19:13:19-05:00 SUMMARY:
+2025-12-17T19:13:19-05:00   Baseline mean ttfb=0.0083s total=0.0084s
+2025-12-17T19:13:19-05:00   Chaos   mean ttfb=0.0092s total=0.0092s
+2025-12-17T19:13:19-05:00   See code distributions above for error-rate and resilience checks.
+2025-12-17T19:13:19-05:00 Finished. Log written to: logs/analysis_20251217_191235.log

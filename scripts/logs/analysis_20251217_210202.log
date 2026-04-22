@@ -1,0 +1,15 @@
+2025-12-17T21:02:02-05:00 Starting analysis. BASE=http://localhost:8080
+------------------------------------------------------------
+2025-12-17T21:02:02-05:00 Warm up gateway and service health endpoints
+2025-12-17T21:02:02-05:00   GET /health -> 000
+ERR
+2025-12-17T21:02:02-05:00   GET /auth/health -> 000
+ERR
+2025-12-17T21:02:02-05:00   GET /users/health -> 000
+ERR
+2025-12-17T21:02:02-05:00   GET /posts/health -> 000
+ERR
+2025-12-17T21:02:02-05:00   GET /comments/health -> 000
+ERR
+------------------------------------------------------------
+2025-12-17T21:02:02-05:00 Baseline latency for /posts/health (ITER=10)

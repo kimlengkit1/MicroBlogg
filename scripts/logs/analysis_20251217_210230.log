@@ -1,0 +1,24 @@
+2025-12-17T21:02:30-05:00 Starting analysis. BASE=http://localhost:8080
+------------------------------------------------------------
+2025-12-17T21:02:30-05:00 Warm up gateway and service health endpoints
+2025-12-17T21:02:30-05:00   GET /health -> 200
+2025-12-17T21:02:30-05:00   GET /auth/health -> 200
+2025-12-17T21:02:30-05:00   GET /users/health -> 200
+2025-12-17T21:02:30-05:00   GET /posts/health -> 200
+2025-12-17T21:02:30-05:00   GET /comments/health -> 200
+------------------------------------------------------------
+2025-12-17T21:02:30-05:00 Baseline latency for /posts/health (ITER=10)
+2025-12-17T21:02:30-05:00   sample#1 ttfb=0.013522s total=0.013591s code=200
+2025-12-17T21:02:30-05:00   sample#2 ttfb=0.011734s total=0.011813s code=200
+2025-12-17T21:02:30-05:00   sample#3 ttfb=0.010933s total=0.011119s code=200
+2025-12-17T21:02:31-05:00   sample#4 ttfb=0.013829s total=0.013886s code=200
+2025-12-17T21:02:31-05:00   sample#5 ttfb=0.010793s total=0.010858s code=200
+2025-12-17T21:02:31-05:00   sample#6 ttfb=0.009905s total=0.009959s code=200
+2025-12-17T21:02:31-05:00   sample#7 ttfb=0.009751s total=0.009802s code=200
+2025-12-17T21:02:31-05:00   sample#8 ttfb=0.009838s total=0.009901s code=200
+2025-12-17T21:02:31-05:00   sample#9 ttfb=0.010804s total=0.010873s code=200
+2025-12-17T21:02:31-05:00   sample#10 ttfb=0.014036s total=0.014111s code=200
+2025-12-17T21:02:31-05:00 Baseline mean TTFB=0.0115s, mean total=0.0116s
+------------------------------------------------------------
+2025-12-17T21:02:31-05:00 Enable chaos on post-service: fail_rate=0.10, delay=100ms @0.30
+{"detail":"Not Found"}
