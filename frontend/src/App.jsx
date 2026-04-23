@@ -1,9 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login from "./pages/LoginPage";
-
-function HomePage() {
-  return <h1>Welcome to MicroBlogg</h1>
-}
+import HomePage from "./pages/Homepage";
 
 function App() {
   return (
