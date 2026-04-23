@@ -1,11 +1,18 @@
-import "./App.css";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import Login from "./pages/LoginPage";
+
+function HomePage() {
+  return <h1>Welcome to MicroBlogg</h1>
+}
 
 function App() {
   return (
-    <div className="app">
-      <h1>MicroBlogg</h1>
-      <p>My React frontend is working.</p>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Login />} />
+        <Route path="/home" element={<HomePage />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

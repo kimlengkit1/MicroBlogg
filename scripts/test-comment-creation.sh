@@ -2,8 +2,8 @@
 set -euo pipefail
 
 BASE="http://localhost:8080"
-EMAIL="testcomment@example.com"
-PASS="testpass123"
+EMAIL="${EMAIL:-testuser@example.com}"
+PASS="${PASS:-testpass123}"
 
 echo "=== Testing Comment Creation ==="
 echo ""
