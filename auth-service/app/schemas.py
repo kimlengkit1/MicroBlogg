@@ -14,8 +14,11 @@ class HealthResponse(BaseModel):
 
 # auth I/O
 class SignupIn(BaseModel):
+    first_name: str
+    last_name: str
     email: EmailStr
     password: str
+    dob: str
 
 class LoginIn(BaseModel):
     email: EmailStr
@@ -28,3 +31,6 @@ class TokenOut(BaseModel):
 class UserOut(BaseModel):
     id: str
     email: EmailStr
+    first_name: str
+    last_name: str
+    dob: str

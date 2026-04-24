@@ -6,4 +6,8 @@ class User(SQLModel, table=True):
     id: str = Field(primary_key=True, index=True)
     email: str = Field(unique=True, index=True)
     password_hash: str
+
+    first_name: str
+    last_name: str
+    dob: str
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
