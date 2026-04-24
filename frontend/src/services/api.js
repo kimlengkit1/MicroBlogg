@@ -68,3 +68,13 @@ export async function createPost(title, body) {
     }
     return data;
 }
+
+export async function getPosts() {
+    const response = await fetch(`${API_BASE}/posts`);
+    const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error("Failed to fetch posts");
+    }
+    return data;
+}
