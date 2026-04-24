@@ -19,6 +19,29 @@ export async function loginUser(email, password) {
     return data;
 }
 
+export async function signUpUser(firstName, lastName, email, password, dob) {
+    const response = await fetch(`${API_BASE}/auth/signup`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            first_name: firstName,
+            last_name: lastName,
+            email,
+            password,
+            dob
+        }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error(data.detail || "Signup failed");
+    }
+    return data;
+}
+
 export function getToken() {
     return localStorage.getItem("token");
 }
