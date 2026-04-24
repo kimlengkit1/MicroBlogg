@@ -8,9 +8,18 @@ from .db import init_db, get_session
 from .models import User
 from .schemas import SignupIn, LoginIn, TokenOut, UserOut, HealthResponse, DependencyHealth, Status
 from .security import hash_password, verify_password, mint_token, verify_token
+from fastapi.middleware.cors import CORSMiddleware
 
 APP_NAME = "auth-service"
 app = FastAPI(title=APP_NAME)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.on_event("startup")
 def startup():
@@ -35,9 +44,22 @@ def signup(body: SignupIn, session: Session = Depends(get_session)):
     existing = session.exec(select(User).where(User.email == body.email)).first()
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
-    u = User(id=str(uuid.uuid4()), email=body.email, password_hash=hash_password(body.password))
+    u = User(
+            id=str(uuid.uuid4()), 
+            email=body.email, 
+            password_hash=hash_password(body.password),
+            first_name=body.first_name,
+            last_name=body.last_name,
+            dob=body.dob,
+        )
     session.add(u); session.commit(); session.refresh(u)
-    return UserOut(id=u.id, email=u.email)
+    return UserOut(
+            id=u.id, 
+            email=u.email,
+            first_name=u.first_name,
+            last_name=u.last_name,
+            dob=u.dob,
+        )
 
 @app.post("/auth/login", response_model=TokenOut)
 def login(body: LoginIn, session: Session = Depends(get_session)):
